@@ -1,0 +1,8 @@
+.env
+storage/*.faiss
+storage/*.json
+data/uploads/*
+!data/uploads/.gitkeep
+__pycache__/
+*.pyc
+.venv/

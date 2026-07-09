@@ -1,0 +1,6 @@
+sentence-transformers
+faiss-cpu
+pypdf
+langchain-text-splitters
+openai
+python-dotenv
