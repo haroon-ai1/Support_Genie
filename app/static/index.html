@@ -312,11 +312,17 @@ function renderBot(el, data) {
   el.classList.toggle("handoff", data.handoff);
   el.textContent = data.answer;
 
+  if (data.mode === "conversational") {
+    scrollToLatest();
+    return;
+  }
+
   const strip = document.createElement("div");
   strip.className = "telemetry";
-  const pct = Math.max(0, Math.min(1, data.confidence)) * 100;
+  const conf = typeof data.confidence === "number" ? data.confidence : 0;
+  const pct = Math.max(0, Math.min(1, conf)) * 100;
 
-  let html = '<span>conf ' + data.confidence.toFixed(3) + '</span>' +
+  let html = '<span>conf ' + conf.toFixed(3) + '</span>' +
              '<span class="conf-bar"><span class="conf-fill" style="width:' + pct + '%"></span></span>';
   if (data.handoff) {
     html += '<span class="handoff-flag">↪ human handoff</span>';

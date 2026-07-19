@@ -1,41 +1,45 @@
 """RAG orchestration: retrieve -> confidence gate -> generate.
 
-The confidence gate is the production-critical piece: if the best retrieved
-chunk scores below CONFIDENCE_THRESHOLD, we do NOT let the LLM guess — we
-hand off to a human. Support bots must never invent refund policies.
+Above the confidence threshold we ground the answer in retrieved context.
+Below it, we hand the message to a conversational LLM call that handles
+greetings and off-topic requests without inventing product facts.
 """
 from . import config, llm
 from .ingest import KnowledgeBase
 
+# TODO: reintroduce for explicit escalation
 HANDOFF_MESSAGE = (
     "I'm not confident I have the right information to answer that. "
     "Let me connect you with a human agent who can help."
 )
 
 
-def answer(kb: KnowledgeBase, question: str) -> dict:
-    """Full RAG pass. Returns answer text, sources, confidence, handoff flag."""
+def answer(kb: KnowledgeBase, question: str, brand_name: str = "SupportGenie") -> dict:
+    """Full RAG pass. Returns answer text, sources, confidence, handoff flag, mode."""
     results = kb.search(question)
 
     top_score = results[0]["score"] if results else 0.0
-    if not results or top_score < config.CONFIDENCE_THRESHOLD:
+
+    if results and top_score >= config.CONFIDENCE_THRESHOLD:
+        context = "\n\n".join(
+            f"[{r['source']}] {r['text']}" for r in results
+        )
+        reply = llm.generate(question, context, brand_name=brand_name)
         return {
-            "answer": HANDOFF_MESSAGE,
-            "sources": [],
+            "answer": reply,
+            "sources": [
+                {"source": r["source"], "score": round(r["score"], 3)} for r in results
+            ],
             "confidence": round(top_score, 3),
-            "handoff": True,
+            "handoff": False,
+            "mode": "grounded",
         }
 
-    context = "\n\n".join(
-        f"[{r['source']}] {r['text']}" for r in results
-    )
-    reply = llm.generate(question, context)
-
+    conversational_reply = llm.generate_conversational(question, brand_name=brand_name)
     return {
-        "answer": reply,
-        "sources": [
-            {"source": r["source"], "score": round(r["score"], 3)} for r in results
-        ],
-        "confidence": round(top_score, 3),
+        "answer": conversational_reply,
+        "sources": [],
+        "confidence": 0.0,
         "handoff": False,
+        "mode": "conversational",
     }

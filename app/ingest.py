@@ -4,6 +4,8 @@ Same pattern as PixSearch: L2-normalized embeddings in an inner-product FAISS
 index, so inner product == cosine similarity. Text chunks instead of images.
 """
 import json
+import logging
+import threading
 from pathlib import Path
 
 import faiss
@@ -14,6 +16,8 @@ from sentence_transformers import SentenceTransformer
 
 from . import config
 
+logger = logging.getLogger(__name__)
+
 _splitter = RecursiveCharacterTextSplitter(
     chunk_size=config.CHUNK_SIZE,
     chunk_overlap=config.CHUNK_OVERLAP,
@@ -22,8 +26,12 @@ _splitter = RecursiveCharacterTextSplitter(
 
 
 def _load_pdf(path: Path) -> str:
-    reader = PdfReader(str(path))
-    return "\n".join(page.extract_text() or "" for page in reader.pages)
+    try:
+        reader = PdfReader(str(path))
+        return "\n".join(page.extract_text() or "" for page in reader.pages)
+    except Exception as exc:
+        logger.warning("Failed to read PDF %s: %s", path, exc)
+        return ""
 
 
 def _load_file(path: Path) -> str:
@@ -41,14 +49,26 @@ class KnowledgeBase:
         dim = getdim()
         self.index = faiss.IndexFlatIP(dim)
         self.chunks: list[dict] = []  # [{"text": ..., "source": ...}]
+        # FAISS is not thread-safe; guard read+write access from concurrent workers.
+        self._lock = threading.RLock()
         self._load_if_exists()
 
     # ---------- persistence ----------
 
     def _load_if_exists(self):
-        if config.INDEX_PATH.exists() and config.CHUNKS_PATH.exists():
-            self.index = faiss.read_index(str(config.INDEX_PATH))
-            self.chunks = json.loads(config.CHUNKS_PATH.read_text(encoding="utf-8"))
+        if not (config.INDEX_PATH.exists() and config.CHUNKS_PATH.exists()):
+            return
+        try:
+            index = faiss.read_index(str(config.INDEX_PATH))
+            chunks = json.loads(config.CHUNKS_PATH.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, RuntimeError) as exc:
+            logger.warning("Failed to load persisted index/chunks (%s); starting empty.", exc)
+            return
+        if not isinstance(chunks, list):
+            logger.warning("chunks.json is not a list; starting empty.")
+            return
+        self.index = index
+        self.chunks = chunks
 
     def save(self):
         config.STORAGE_DIR.mkdir(parents=True, exist_ok=True)
@@ -72,10 +92,13 @@ class KnowledgeBase:
         if not text:
             return 0
         pieces = _splitter.split_text(text)
+        if not pieces:
+            return 0
         vecs = self._embed(pieces)
-        self.index.add(vecs)
-        self.chunks.extend({"text": p, "source": path.name} for p in pieces)
-        self.save()
+        with self._lock:
+            self.index.add(vecs)
+            self.chunks.extend({"text": p, "source": path.name} for p in pieces)
+            self.save()
         return len(pieces)
 
     def add_text(self, text: str, source: str = "pasted_text") -> int:
@@ -84,9 +107,10 @@ class KnowledgeBase:
         if not pieces:
             return 0
         vecs = self._embed(pieces)
-        self.index.add(vecs)
-        self.chunks.extend({"text": p, "source": source} for p in pieces)
-        self.save()
+        with self._lock:
+            self.index.add(vecs)
+            self.chunks.extend({"text": p, "source": source} for p in pieces)
+            self.save()
         return len(pieces)
 
     # ---------- retrieval ----------
@@ -94,17 +118,18 @@ class KnowledgeBase:
     def search(self, query: str, k: int | None = None) -> list[dict]:
         """Return top-k chunks: [{"text", "source", "score"}], best first."""
         k = k or config.TOP_K
-        if self.index.ntotal == 0:
-            return []
-        qvec = self._embed([query])
-        scores, ids = self.index.search(qvec, min(k, self.index.ntotal))
-        results = []
-        for score, idx in zip(scores[0], ids[0]):
-            if idx == -1:
-                continue
-            chunk = self.chunks[idx]
-            results.append({**chunk, "score": float(score)})
-        return results
+        with self._lock:
+            if self.index.ntotal == 0:
+                return []
+            qvec = self._embed([query])
+            scores, ids = self.index.search(qvec, min(k, self.index.ntotal))
+            results = []
+            for score, idx in zip(scores[0], ids[0]):
+                if idx == -1 or idx >= len(self.chunks):
+                    continue
+                chunk = self.chunks[idx]
+                results.append({**chunk, "score": float(score)})
+            return results
 
     def sources(self) -> dict[str, int]:
         """Chunk count per source document (for the future admin panel)."""

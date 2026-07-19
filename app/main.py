@@ -15,8 +15,9 @@ On startup, if the index is empty, seeds the knowledge base from data/seed/
 so the deployed demo always has content (HF Spaces storage is ephemeral).
 """
 import json
+import logging
 import os
-import shutil
+import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -28,10 +29,14 @@ from . import config
 from .ingest import KnowledgeBase
 from .rag import answer
 
+logger = logging.getLogger(__name__)
+
 ADMIN_KEY = os.getenv("ADMIN_KEY", "changeme")
 SEED_DIR = config.ROOT_DIR / "data" / "seed"
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 BRANDING_PATH = config.STORAGE_DIR / "branding.json"
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
+_ALLOWED_FILENAME = re.compile(r"^[A-Za-z0-9._-]+$")
 
 DEFAULT_BRANDING = {
     "brand_name": "SupportGenie",
@@ -67,14 +72,32 @@ def _seed_if_empty():
                 kb.add_document(f)
 
 
+def _sanitize_upload_name(raw: str | None) -> str:
+    """Strip any directory components and reject shell/traversal characters."""
+    if not raw:
+        raise HTTPException(status_code=400, detail="Missing filename")
+    name = Path(raw.replace("\\", "/")).name
+    if not name or name in {".", ".."} or not _ALLOWED_FILENAME.match(name):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    return name
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global kb
+    if not ADMIN_KEY or ADMIN_KEY == "changeme":
+        logger.warning(
+            "ADMIN_KEY is unset or the default 'changeme'. "
+            "Set a strong ADMIN_KEY in the environment before exposing this service."
+        )
     kb = KnowledgeBase()
     _seed_if_empty()
     yield
 
 
+# NOTE: CORS is not configured — same-origin only. If a future deployment needs
+# to serve the chat widget from a different origin, add CORSMiddleware and
+# restrict allow_origins to that specific origin (never use "*" in production).
 app = FastAPI(title="SupportGenie", lifespan=lifespan)
 
 
@@ -113,12 +136,20 @@ def health():
 
 @app.post("/api/ask")
 def ask(req: AskRequest):
+    branding = _load_branding()
+    brand_name = branding.get("brand_name") or "SupportGenie"
     question = req.question.strip()
     if not question:
         raise HTTPException(status_code=400, detail="Question is empty")
     if len(question) > 1000:
         raise HTTPException(status_code=400, detail="Question too long")
-    return answer(kb, question)
+    try:
+        return answer(kb, question, brand_name=brand_name)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("answer() failed for question of length %d", len(question))
+        raise HTTPException(status_code=500, detail="The assistant is temporarily unavailable. Please try again in a moment.")
 
 
 @app.get("/api/branding")
@@ -162,13 +193,32 @@ def upload_doc(
     x_admin_key: str | None = Header(default=None),
 ):
     _check_admin(x_admin_key)
-    suffix = Path(file.filename).suffix.lower()
+    safe_name = _sanitize_upload_name(file.filename)
+    suffix = Path(safe_name).suffix.lower()
     if suffix not in {".pdf", ".txt", ".md"}:
         raise HTTPException(status_code=400, detail="Only .pdf, .txt, .md files are supported")
     config.UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
-    dest = config.UPLOADS_DIR / Path(file.filename).name
-    with dest.open("wb") as out:
-        shutil.copyfileobj(file.file, out)
+    dest = config.UPLOADS_DIR / safe_name
+    size = 0
+    chunk_size = 64 * 1024
+    try:
+        with dest.open("wb") as out:
+            while True:
+                chunk = file.file.read(chunk_size)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > MAX_UPLOAD_BYTES:
+                    out.close()
+                    dest.unlink(missing_ok=True)
+                    raise HTTPException(status_code=413, detail="File too large (max 10 MB)")
+                out.write(chunk)
+    except HTTPException:
+        raise
+    except OSError as exc:
+        logger.warning("Upload write failed for %s: %s", safe_name, exc)
+        dest.unlink(missing_ok=True)
+        raise HTTPException(status_code=500, detail="Could not save uploaded file")
     n = kb.add_document(dest)
     if n == 0:
         raise HTTPException(status_code=400, detail="No text could be extracted from the file")
