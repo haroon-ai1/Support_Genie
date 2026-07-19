@@ -1,16 +1,3 @@
----
-title: SupportGenie
-emoji: 💬
-colorFrom: blue
-colorTo: indigo
-sdk: gradio
-sdk_version: 4.44.0
-app_file: app.py
-pinned: false
-license: mit
----
-
-
 # SupportGenie
 
 A **white-label customer support chatbot** built on Retrieval-Augmented Generation. An admin uploads a company's knowledge base — FAQs, policies, product docs — and customers get answers grounded strictly in those documents, with **source citations, retrieval confidence, and a hardened conversational layer** that refuses off-topic requests and jailbreak attempts.
