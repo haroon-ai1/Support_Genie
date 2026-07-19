@@ -37,7 +37,8 @@ class KnowledgeBase:
 
     def __init__(self):
         self.embedder = SentenceTransformer(config.EMBED_MODEL)
-        dim = self.embedder.get_embedding_dimension()
+        getdim = getattr(self.embedder, "get_embedding_dimension", None) or self.embedder.get_sentence_embedding_dimension
+        dim = getdim()
         self.index = faiss.IndexFlatIP(dim)
         self.chunks: list[dict] = []  # [{"text": ..., "source": ...}]
         self._load_if_exists()

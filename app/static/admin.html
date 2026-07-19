@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SupportGenie — Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --first-color: hsl(219, 96%, 56%);
+    --first-color-alt: hsl(219, 96%, 50%);
+    --first-color-light: hsl(219, 96%, 96%);
+    --title-color: hsl(219, 20%, 15%);
+    --text-color: hsl(219, 12%, 35%);
+    --text-color-light: hsl(219, 8%, 55%);
+    --body-color: hsl(0, 0%, 100%);
+    --container-color: hsl(219, 25%, 98%);
+    --border-color: hsl(219, 15%, 90%);
+    --success: hsl(142, 71%, 45%);
+    --error: hsl(0, 72%, 51%);
+    --shadow: 0 4px 20px hsl(219, 30%, 15%, 0.06);
+    --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--body-color);
+    color: var(--text-color);
+    font-family: 'Poppins', system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    font-weight: 400;
+    -webkit-font-smoothing: antialiased;
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 0 1.5rem 3.5rem;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    gap: 0.875rem;
+    padding: 1.5rem 0.25rem 1.25rem;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 1.75rem;
+  }
+  #brand-logo {
+    width: 42px; height: 42px;
+    border-radius: 0.625rem;
+    background: var(--first-color);
+    color: #ffffff;
+    display: grid; place-items: center;
+    font-weight: 600;
+    font-size: 15px;
+    letter-spacing: -0.01em;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  #brand-logo img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .brand-text { display: flex; flex-direction: column; min-width: 0; }
+  #brand-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--title-color);
+    letter-spacing: -0.01em;
+    line-height: 1.3;
+  }
+  #brand-subtitle {
+    font-size: 13px;
+    color: var(--text-color-light);
+    font-weight: 400;
+    line-height: 1.3;
+  }
+  #brand-subtitle a {
+    color: var(--text-color-light);
+    text-decoration: none;
+    border-bottom: 1px solid var(--border-color);
+    transition: color 150ms, border-color 150ms;
+  }
+  #brand-subtitle a:hover { color: var(--title-color); border-bottom-color: var(--text-color-light); }
+
+  .page-title {
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--title-color);
+    letter-spacing: -0.02em;
+    margin-bottom: 0.25rem;
+  }
+  .page-sub {
+    color: var(--text-color-light);
+    font-size: 14px;
+    margin-bottom: 1.5rem;
+  }
+
+  .card {
+    background: var(--container-color);
+    border: 1px solid var(--border-color);
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+    box-shadow: var(--shadow);
+  }
+  .card h2 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--title-color);
+    letter-spacing: -0.005em;
+    margin-bottom: 0.9rem;
+  }
+  label {
+    display: block;
+    font-size: 13px;
+    color: var(--text-color-light);
+    margin-bottom: 0.35rem;
+    font-weight: 400;
+  }
+  input[type="password"],
+  input[type="text"],
+  input[type="url"],
+  select,
+  textarea,
+  input[type="file"] {
+    width: 100%;
+    background: var(--body-color);
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    padding: 0.625rem 0.75rem;
+    color: var(--title-color);
+    font: inherit;
+    font-size: 14px;
+    margin-bottom: 0.75rem;
+    transition: border-color 150ms, background-color 150ms;
+  }
+  select { cursor: pointer; }
+  input[type="file"] {
+    padding: 0.5rem 0.75rem;
+    background: var(--body-color);
+    cursor: pointer;
+  }
+  textarea { min-height: 110px; resize: vertical; font-family: inherit; }
+  input:focus, textarea:focus, select:focus {
+    outline: 2px solid var(--first-color);
+    outline-offset: -1px;
+    border-color: transparent;
+  }
+  input::placeholder, textarea::placeholder { color: var(--text-color-light); }
+
+  .row-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+  }
+  .row-2 > div { margin-bottom: 0; }
+  @media (max-width: 520px) { .row-2 { grid-template-columns: 1fr; } }
+
+  button {
+    background: var(--first-color);
+    color: #ffffff;
+    border: none;
+    border-radius: 0.5rem;
+    padding: 0.6rem 1.1rem;
+    font: inherit;
+    font-weight: 500;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 150ms, color 150ms, border-color 150ms;
+  }
+  button:hover { background: var(--first-color-alt); }
+  button:focus-visible {
+    outline: 2px solid var(--first-color);
+    outline-offset: 2px;
+  }
+  button.danger {
+    background: transparent;
+    color: var(--error);
+    border: 1px solid var(--error);
+  }
+  button.danger:hover {
+    background: var(--error);
+    color: #ffffff;
+  }
+
+  #status {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px;
+    padding: 0.75rem 0;
+    min-height: 34px;
+    color: var(--text-color-light);
+    white-space: pre-wrap;
+  }
+  #status.ok { color: var(--success); }
+  #status.err { color: var(--error); }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+  }
+  thead tr { background: var(--body-color); }
+  th {
+    text-align: left;
+    padding: 0.625rem 0.75rem;
+    color: var(--text-color-light);
+    font-weight: 500;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid var(--border-color);
+  }
+  td {
+    text-align: left;
+    padding: 0.625rem 0.75rem;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-color);
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td.mono {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 12.5px;
+    color: var(--title-color);
+  }
+  .empty-cell { color: var(--text-color-light); }
+
+  .brand-preview {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    background: var(--body-color);
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    margin-bottom: 0.75rem;
+  }
+  .brand-preview .preview-logo {
+    width: 40px; height: 40px;
+    border-radius: 0.625rem;
+    background: var(--first-color);
+    color: #ffffff;
+    display: grid; place-items: center;
+    font-weight: 600;
+    font-size: 14px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .brand-preview .preview-logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .brand-preview .preview-text { display: flex; flex-direction: column; }
+  .brand-preview .preview-name { font-size: 14px; font-weight: 600; color: var(--title-color); line-height: 1.3; }
+  .brand-preview .preview-sub { font-size: 12.5px; color: var(--text-color-light); line-height: 1.3; }
+
+  .hidden { display: none !important; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+</style>
+</head>
+<body>
+  <header>
+    <div id="brand-logo">SG</div>
+    <div class="brand-text">
+      <span id="brand-name">SupportGenie</span>
+      <span id="brand-subtitle">Customer Support · <a href="/">back to chat</a></span>
+    </div>
+  </header>
+
+  <h1 class="page-title">Knowledge base</h1>
+  <p class="page-sub">Manage the documents the support assistant answers from.</p>
+
+  <div class="card">
+    <h2>Admin key</h2>
+    <label for="key">Required for all actions below (set via ADMIN_KEY env variable)</label>
+    <input type="password" id="key" placeholder="Enter admin key" autocomplete="off">
+    <button onclick="refreshDocs()">Unlock &amp; view knowledge base</button>
+  </div>
+
+  <div class="card">
+    <h2>Branding</h2>
+    <label for="brand-name-input">Brand name</label>
+    <input type="text" id="brand-name-input" placeholder="SupportGenie" maxlength="60">
+
+    <label for="brand-subtitle-input">Subtitle</label>
+    <input type="text" id="brand-subtitle-input" placeholder="Customer Support" maxlength="80">
+
+    <label for="logo-mode">Logo mode</label>
+    <select id="logo-mode">
+      <option value="initials">Initials + color</option>
+      <option value="image">Image URL</option>
+    </select>
+
+    <div id="initials-fields">
+      <div class="row-2">
+        <div>
+          <label for="logo-initials">Initials (1–3 chars)</label>
+          <input type="text" id="logo-initials" placeholder="SG" maxlength="3">
+        </div>
+        <div>
+          <label for="logo-color">Logo background color (CSS)</label>
+          <input type="text" id="logo-color" placeholder="hsl(219, 96%, 56%)">
+        </div>
+      </div>
+    </div>
+
+    <div id="image-fields" class="hidden">
+      <label for="logo-url">Image URL</label>
+      <input type="url" id="logo-url" placeholder="https://example.com/logo.png">
+    </div>
+
+    <div class="brand-preview" aria-hidden="true">
+      <div class="preview-logo" id="preview-logo">SG</div>
+      <div class="preview-text">
+        <span class="preview-name" id="preview-name">SupportGenie</span>
+        <span class="preview-sub" id="preview-sub">Customer Support</span>
+      </div>
+    </div>
+
+    <button onclick="saveBranding()">Save branding</button>
+  </div>
+
+  <div class="card">
+    <h2>Indexed documents</h2>
+    <table id="docs">
+      <thead><tr><th>Source</th><th>Chunks</th></tr></thead>
+      <tbody><tr><td colspan="2" class="empty-cell">Unlock with your admin key to view.</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Upload document</h2>
+    <label for="file">.pdf, .txt or .md — FAQs, policies, product info</label>
+    <input type="file" id="file" accept=".pdf,.txt,.md">
+    <button onclick="upload()">Ingest file</button>
+  </div>
+
+  <div class="card">
+    <h2>Paste text</h2>
+    <label for="src">Source name</label>
+    <input type="text" id="src" placeholder="e.g. refund_policy" value="pasted_text">
+    <label for="text">Content</label>
+    <textarea id="text" placeholder="Paste FAQ entries, policy text, product descriptions…"></textarea>
+    <button onclick="addText()">Ingest text</button>
+  </div>
+
+  <div class="card">
+    <h2>Reset</h2>
+    <label>Clears everything and re-loads the demo seed documents</label>
+    <button class="danger" onclick="resetKb()">Reset knowledge base</button>
+  </div>
+
+  <div id="status">Ready.</div>
+
+<script>
+const status = document.getElementById("status");
+const key = () => document.getElementById("key").value;
+
+const brandNameEl = document.getElementById("brand-name");
+const brandSubtitleEl = document.getElementById("brand-subtitle");
+const brandLogoEl = document.getElementById("brand-logo");
+
+const brandNameInput = document.getElementById("brand-name-input");
+const brandSubtitleInput = document.getElementById("brand-subtitle-input");
+const logoModeSel = document.getElementById("logo-mode");
+const logoInitialsInput = document.getElementById("logo-initials");
+const logoColorInput = document.getElementById("logo-color");
+const logoUrlInput = document.getElementById("logo-url");
+const initialsFields = document.getElementById("initials-fields");
+const imageFields = document.getElementById("image-fields");
+
+const previewLogo = document.getElementById("preview-logo");
+const previewName = document.getElementById("preview-name");
+const previewSub = document.getElementById("preview-sub");
+
+function setStatus(msg, cls) {
+  status.textContent = msg;
+  status.className = cls || "";
+}
+
+async function api(path, opts = {}) {
+  opts.headers = Object.assign({}, opts.headers, { "X-Admin-Key": key() });
+  const res = await fetch(path, opts);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || ("HTTP " + res.status));
+  return data;
+}
+
+function renderHeaderBranding(b) {
+  brandNameEl.textContent = b.brand_name;
+  const sub = b.subtitle || "";
+  brandSubtitleEl.innerHTML = (sub ? (escapeHtml(sub) + " · ") : "") + '<a href="/">back to chat</a>';
+  document.title = b.brand_name + " — Admin";
+  if (b.logo_mode === "image" && b.logo_url) {
+    brandLogoEl.innerHTML = '';
+    brandLogoEl.style.background = "transparent";
+    const img = document.createElement("img");
+    img.src = b.logo_url;
+    img.alt = b.brand_name;
+    brandLogoEl.appendChild(img);
+  } else {
+    brandLogoEl.innerHTML = '';
+    brandLogoEl.style.background = b.logo_color || "var(--first-color)";
+    brandLogoEl.textContent = b.logo_initials || b.brand_name.slice(0, 2).toUpperCase();
+  }
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function updatePreview() {
+  const name = brandNameInput.value.trim() || "SupportGenie";
+  const sub = brandSubtitleInput.value.trim();
+  previewName.textContent = name;
+  previewSub.textContent = sub;
+  if (logoModeSel.value === "image" && logoUrlInput.value.trim()) {
+    previewLogo.innerHTML = '';
+    previewLogo.style.background = "transparent";
+    const img = document.createElement("img");
+    img.src = logoUrlInput.value.trim();
+    img.alt = name;
+    previewLogo.appendChild(img);
+  } else {
+    previewLogo.innerHTML = '';
+    previewLogo.style.background = logoColorInput.value.trim() || "var(--first-color)";
+    previewLogo.textContent = (logoInitialsInput.value.trim() || name.slice(0, 2)).toUpperCase();
+  }
+}
+
+function syncLogoModeFields() {
+  const mode = logoModeSel.value;
+  initialsFields.classList.toggle("hidden", mode !== "initials");
+  imageFields.classList.toggle("hidden", mode !== "image");
+  updatePreview();
+}
+
+[brandNameInput, brandSubtitleInput, logoInitialsInput, logoColorInput, logoUrlInput].forEach(el => {
+  el.addEventListener("input", updatePreview);
+});
+logoModeSel.addEventListener("change", syncLogoModeFields);
+
+async function loadBranding() {
+  try {
+    const res = await fetch("/api/branding");
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const b = await res.json();
+    brandNameInput.value = b.brand_name || "";
+    brandSubtitleInput.value = b.subtitle || "";
+    logoModeSel.value = b.logo_mode || "initials";
+    logoInitialsInput.value = b.logo_initials || "";
+    logoColorInput.value = b.logo_color || "";
+    logoUrlInput.value = b.logo_url || "";
+    syncLogoModeFields();
+    renderHeaderBranding(b);
+  } catch (_) { /* keep defaults */ }
+}
+loadBranding();
+
+async function saveBranding() {
+  const payload = {
+    brand_name: brandNameInput.value.trim(),
+    subtitle: brandSubtitleInput.value.trim(),
+    logo_mode: logoModeSel.value,
+    logo_initials: logoInitialsInput.value.trim(),
+    logo_color: logoColorInput.value.trim(),
+    logo_url: logoUrlInput.value.trim(),
+  };
+  if (!payload.brand_name) return setStatus("Brand name is required.", "err");
+  try {
+    const saved = await api("/api/admin/branding", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    renderHeaderBranding(saved);
+    setStatus("Branding saved.", "ok");
+  } catch (e) { setStatus("Error: " + e.message, "err"); }
+}
+
+async function refreshDocs() {
+  try {
+    const data = await api("/api/admin/docs");
+    const tbody = document.querySelector("#docs tbody");
+    tbody.innerHTML = "";
+    const entries = Object.entries(data.sources);
+    if (!entries.length) {
+      tbody.innerHTML = '<tr><td colspan="2" class="empty-cell">Knowledge base is empty. Upload a document below.</td></tr>';
+    }
+    for (const [src, n] of entries) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = '<td class="mono">' + escapeHtml(src) + '</td><td>' + n + '</td>';
+      tbody.appendChild(tr);
+    }
+    setStatus("Loaded. " + data.total_chunks + " chunks indexed across " + entries.length + " sources.", "ok");
+  } catch (e) { setStatus("Error: " + e.message, "err"); }
+}
+
+async function upload() {
+  const f = document.getElementById("file").files[0];
+  if (!f) return setStatus("Choose a file first.", "err");
+  const fd = new FormData();
+  fd.append("file", f);
+  setStatus("Ingesting " + f.name + "…");
+  try {
+    const data = await api("/api/admin/upload", { method: "POST", body: fd });
+    setStatus("Ingested " + data.ingested_chunks + " chunks from " + data.source + ".", "ok");
+    refreshDocs();
+  } catch (e) { setStatus("Error: " + e.message, "err"); }
+}
+
+async function addText() {
+  const text = document.getElementById("text").value.trim();
+  const src = document.getElementById("src").value.trim() || "pasted_text";
+  if (!text) return setStatus("Paste some text first.", "err");
+  const fd = new FormData();
+  fd.append("text", text);
+  fd.append("source", src);
+  setStatus("Ingesting text…");
+  try {
+    const data = await api("/api/admin/text", { method: "POST", body: fd });
+    setStatus("Ingested " + data.ingested_chunks + " chunks as " + data.source + ".", "ok");
+    document.getElementById("text").value = "";
+    refreshDocs();
+  } catch (e) { setStatus("Error: " + e.message, "err"); }
+}
+
+async function resetKb() {
+  if (!confirm("Clear the entire knowledge base and re-load demo seed docs?")) return;
+  try {
+    const data = await api("/api/admin/reset", { method: "POST" });
+    setStatus("Reset complete. " + data.total_chunks + " seed chunks loaded.", "ok");
+    refreshDocs();
+  } catch (e) { setStatus("Error: " + e.message, "err"); }
+}
+</script>
+</body>
+</html>
