@@ -1,4 +1,7 @@
-"""Central configuration. Everything tunable lives in .env — no magic numbers in code."""
+"""Central configuration. Everything tunable lives in .env — no magic numbers in code.
+
+Author: Muhammad Haroon (github.com/haroon-ai1)
+"""
 import os
 from pathlib import Path
 
@@ -23,6 +26,13 @@ EMBED_MODEL = os.getenv("EMBED_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
 TOP_K = int(os.getenv("TOP_K", "3"))
 # Cosine-similarity score below which we refuse to answer and hand off to a human.
 CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD", "0.35"))
+# Below this, retrieval found nothing plausibly relevant at all ("no_context").
+# Between this and CONFIDENCE_THRESHOLD, something relevant exists but isn't
+# confident enough to answer from ("low_confidence"). Splitting the old single
+# "not confident enough" bucket into these two lets the Decision Engine tell a
+# customer whether the topic is (a) not in the KB at all vs (b) covered but the
+# match was weak.
+NO_CONTEXT_THRESHOLD = float(os.getenv("NO_CONTEXT_THRESHOLD", "0.15"))
 
 # Chunking
 CHUNK_SIZE = 500      # characters

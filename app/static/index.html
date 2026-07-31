@@ -1,8 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<!--
+  SupportGenie — Muhammad Haroon
+  github.com/haroon-ai1/Support_Genie · haroon-ai1.vercel.app
+-->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="Muhammad Haroon (github.com/haroon-ai1)">
 <title>SupportGenie — Customer Support</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -44,6 +49,12 @@
     display: flex;
     flex-direction: column;
     padding: 0 1.5rem;
+    opacity: 0;
+    transform: translateY(8px);
+    animation: shell-in 200ms ease-out forwards;
+  }
+  @keyframes shell-in {
+    to { opacity: 1; transform: translateY(0); }
   }
 
   header {
@@ -99,6 +110,7 @@
   #chat {
     flex: 1;
     overflow-y: auto;
+    scroll-behavior: smooth;
     padding: 1.5rem 0.25rem;
     display: flex;
     flex-direction: column;
@@ -116,8 +128,8 @@
     padding: 0.75rem 0.9rem;
     border-radius: 0.75rem;
     opacity: 0;
-    transform: translateY(6px);
-    animation: msg-in 260ms var(--ease) forwards;
+    transform: translateY(8px);
+    animation: msg-in 180ms ease-out forwards;
     box-shadow: var(--shadow);
   }
   @keyframes msg-in {
@@ -149,6 +161,13 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 8px;
+    opacity: 0;
+    transform: scale(0.95);
+    animation: telemetry-in 150ms ease-out forwards;
+    animation-delay: 40ms;
+  }
+  @keyframes telemetry-in {
+    to { opacity: 1; transform: scale(1); }
   }
   .conf-bar {
     width: 64px; height: 5px;
@@ -160,6 +179,7 @@
     height: 100%;
     background: var(--first-color);
     border-radius: 3px;
+    transition: width 200ms var(--ease);
   }
   .handoff .conf-fill { background: var(--error); }
   .src-chip {
@@ -168,6 +188,14 @@
     border-radius: 0.375rem;
     padding: 2px 8px;
     color: var(--text-color-light);
+  }
+  .decision-badge {
+    background: var(--body-color);
+    border: 1px solid var(--error);
+    color: var(--error);
+    border-radius: 0.375rem;
+    padding: 2px 8px;
+    font-weight: 500;
   }
   .handoff-flag {
     color: var(--error);
@@ -190,13 +218,14 @@
     font-size: 13px;
     color: var(--text-color);
     cursor: pointer;
-    transition: border-color 150ms, color 150ms, background-color 150ms;
+    transition: border-color 150ms, color 150ms, background-color 150ms, transform 100ms;
   }
   .starter:hover {
     border-color: var(--first-color);
     color: var(--first-color);
     background: var(--first-color-light);
   }
+  .starter:active { transform: scale(0.97); }
   .starter:focus-visible {
     outline: 2px solid var(--first-color);
     outline-offset: 2px;
@@ -227,7 +256,7 @@
     color: var(--title-color);
     font: inherit;
     font-size: 14.5px;
-    transition: border-color 150ms, background-color 150ms;
+    transition: border-color 120ms, background-color 120ms;
   }
   input[type="text"]::placeholder { color: var(--text-color-light); }
   input[type="text"]:focus {
@@ -245,9 +274,13 @@
     font-weight: 500;
     font-size: 14.5px;
     cursor: pointer;
-    transition: background-color 150ms, color 150ms;
+    transition: background-color 120ms, color 120ms, box-shadow 120ms, transform 100ms;
   }
-  button:hover { background: var(--first-color-alt); }
+  button:hover {
+    background: var(--first-color-alt);
+    box-shadow: 0 2px 8px hsl(219, 96%, 50%, 0.18);
+  }
+  button:active { transform: scale(0.97); }
   button:focus-visible {
     outline: 2px solid var(--first-color);
     outline-offset: 2px;
@@ -256,6 +289,8 @@
     opacity: 0.55;
     cursor: default;
     background: var(--first-color);
+    box-shadow: none;
+    transform: none;
   }
 
   .footnote {
@@ -278,7 +313,7 @@
       animation-iteration-count: 1 !important;
       transition-duration: 0.001ms !important;
     }
-    .msg { opacity: 1; transform: none; }
+    .msg, .shell, .telemetry { opacity: 1; transform: none; }
     .typing span { animation: none; opacity: 0.6; }
   }
 </style>
@@ -368,7 +403,11 @@ function addTyping() {
 }
 
 function renderBot(el, data) {
-  el.classList.toggle("handoff", data.handoff);
+  // Prompt-injection responses have handoff=false but are still an abstention,
+  // so they get the same visual treatment (red accent) as a handoff — reusing
+  // the existing .handoff CSS rather than introducing a new state/color.
+  const isAbstain = data.handoff || data.decision === "abstain";
+  el.classList.toggle("handoff", isAbstain);
   el.textContent = data.answer;
 
   if (data.mode === "conversational") {
@@ -383,12 +422,17 @@ function renderBot(el, data) {
 
   let html = '<span>conf ' + conf.toFixed(3) + '</span>' +
              '<span class="conf-bar"><span class="conf-fill" style="width:' + pct + '%"></span></span>';
+
+  // New: Decision Engine badge (e.g. "🎯 Low Confidence"). Older response
+  // shapes without a badge simply skip this span — nothing breaks.
+  if (data.badge) {
+    html += '<span class="decision-badge">' + data.badge + '</span>';
+  }
+  for (const s of data.sources || []) {
+    html += '<span class="src-chip">' + s.source + ' · ' + s.score.toFixed(2) + '</span>';
+  }
   if (data.handoff) {
     html += '<span class="handoff-flag">↪ human handoff</span>';
-  } else {
-    for (const s of data.sources) {
-      html += '<span class="src-chip">' + s.source + ' · ' + s.score.toFixed(2) + '</span>';
-    }
   }
   strip.innerHTML = html;
   el.appendChild(strip);
