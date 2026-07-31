@@ -1,0 +1,26 @@
+# Build context hygiene — keeps the image small and free of stale state.
+.venv/
+venv/
+env/
+.git/
+.gitignore
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+
+# Runtime state must never be baked into the image: the container
+# re-seeds from data/seed on first boot.
+storage/
+data/uploads/*
+!data/uploads/.gitkeep
+
+# Local-only clutter
+.env
+.claude/
+Screenshots/
+New folder/
+eval_results.json
+*.md
+!README.md

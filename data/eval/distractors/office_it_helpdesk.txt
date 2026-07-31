@@ -1,0 +1,5 @@
+IT Helpdesk Procedures. Staff report technical issues through the internal ticketing system. Priority 1 tickets, which cover complete outages of production systems, are acknowledged within 15 minutes and worked continuously until resolved. Priority 2 covers degraded service and is acknowledged within 2 hours. Priority 3 covers individual workstation problems and is handled within 2 working days.
+
+Hardware Requests. New laptops are issued to employees on confirmation of employment and refreshed every 3 years. Replacement of a damaged device requires an incident report signed by the line manager. Peripherals such as monitors, keyboards, and docking stations are stocked in the office store and issued on request without a ticket.
+
+Password Resets. Domain passwords expire every 90 days. Self-service reset is available through the identity portal using a registered mobile number. Accounts lock after 5 failed attempts and unlock automatically after 30 minutes.

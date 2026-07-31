@@ -12,9 +12,9 @@ import faiss
 import numpy as np
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pypdf import PdfReader
-from sentence_transformers import SentenceTransformer
 
 from . import config
+from .embedder import Embedder
 
 logger = logging.getLogger(__name__)
 
@@ -44,10 +44,10 @@ class KnowledgeBase:
     """FAISS-backed knowledge base with JSON chunk metadata."""
 
     def __init__(self):
-        self.embedder = SentenceTransformer(config.EMBED_MODEL)
+        self.embedder = Embedder(config.EMBED_MODEL)
         getdim = getattr(self.embedder, "get_embedding_dimension", None) or self.embedder.get_sentence_embedding_dimension
-        dim = getdim()
-        self.index = faiss.IndexFlatIP(dim)
+        self.dim = getdim()
+        self.index = faiss.IndexFlatIP(self.dim)
         self.chunks: list[dict] = []  # [{"text": ..., "source": ...}]
         # FAISS is not thread-safe; guard read+write access from concurrent workers.
         self._lock = threading.RLock()
@@ -56,16 +56,25 @@ class KnowledgeBase:
     # ---------- persistence ----------
 
     def _load_if_exists(self):
+        # Startup must never crash on a missing/corrupt/incompatible index file.
+        # self.index is already an empty IndexFlatIP by the time we get here, so
+        # returning early on any failure leaves the KB usable and ingest-ready.
         if not (config.INDEX_PATH.exists() and config.CHUNKS_PATH.exists()):
             return
         try:
             index = faiss.read_index(str(config.INDEX_PATH))
             chunks = json.loads(config.CHUNKS_PATH.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError, RuntimeError) as exc:
+        except Exception as exc:  # noqa: BLE001 - any load failure -> empty start
             logger.warning("Failed to load persisted index/chunks (%s); starting empty.", exc)
             return
         if not isinstance(chunks, list):
             logger.warning("chunks.json is not a list; starting empty.")
+            return
+        if index.d != self.dim:
+            logger.warning(
+                "Persisted index dim %d != embedder dim %d; starting empty (re-ingest required).",
+                index.d, self.dim,
+            )
             return
         self.index = index
         self.chunks = chunks
@@ -80,9 +89,15 @@ class KnowledgeBase:
     # ---------- ingestion ----------
 
     def _embed(self, texts: list[str]) -> np.ndarray:
+        # Single embedding path for both ingest and query, so index and query
+        # vectors are guaranteed to live in the same normalized space.
+        # fastembed L2-normalizes by default; sentence-transformers does not.
+        # We renormalize unconditionally so the FAISS IP index == cosine
+        # regardless of which backend the Embedder wraps. Renormalizing an
+        # already-unit vector is a cheap no-op.
         vecs = self.embedder.encode(texts, convert_to_numpy=True, show_progress_bar=False)
-        vecs = vecs.astype("float32")
-        faiss.normalize_L2(vecs)  # normalized -> inner product == cosine similarity
+        vecs = np.ascontiguousarray(vecs, dtype="float32")
+        faiss.normalize_L2(vecs)
         return vecs
 
     def add_document(self, path: str | Path) -> int:
@@ -112,6 +127,29 @@ class KnowledgeBase:
             self.chunks.extend({"text": p, "source": source} for p in pieces)
             self.save()
         return len(pieces)
+
+    def delete_source(self, source: str) -> int:
+        """Remove every chunk belonging to one source. Returns chunks removed.
+
+        IndexFlatIP stores raw vectors, so surviving rows can be reconstructed
+        and re-added without re-embedding anything — a delete costs no LLM or
+        model calls, just a memcpy.
+        """
+        with self._lock:
+            keep = [i for i, c in enumerate(self.chunks) if c["source"] != source]
+            removed = len(self.chunks) - len(keep)
+            if removed == 0:
+                return 0
+
+            new_index = faiss.IndexFlatIP(self.dim)
+            if keep:
+                vecs = np.vstack([self.index.reconstruct(i) for i in keep])
+                new_index.add(np.ascontiguousarray(vecs, dtype="float32"))
+
+            self.index = new_index
+            self.chunks = [self.chunks[i] for i in keep]
+            self.save()
+        return removed
 
     # ---------- retrieval ----------
 

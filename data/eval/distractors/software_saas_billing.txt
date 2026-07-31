@@ -1,0 +1,7 @@
+Subscription Billing. Plans are billed monthly or annually in advance. Annual billing is discounted relative to the equivalent monthly rate. Seats added mid-cycle are prorated to the end of the current period; seats removed take effect at the next renewal and are not refunded for the remainder of the current period.
+
+Trials. New workspaces receive a 14-day trial of the Business plan with no card required. At the end of the trial the workspace reverts to the free tier and all data is retained; no data is deleted as a result of a trial ending.
+
+Invoices and Tax. Invoices are issued automatically on each renewal and are available in the billing section of the workspace settings. Customers with a valid registration number can enter it in billing settings to have tax handled under the reverse charge mechanism where applicable.
+
+Failed Payments. A failed charge is retried three times over 7 days. The workspace enters a grace period during which it stays fully functional. After the grace period the workspace is downgraded to read-only until billing is resolved.

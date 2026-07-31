@@ -184,6 +184,12 @@
     background: var(--error);
     color: #ffffff;
   }
+  button.row-action {
+    padding: 0.25rem 0.65rem;
+    font-size: 12px;
+    border-radius: 0.375rem;
+  }
+  td.actions { text-align: right; width: 1%; white-space: nowrap; }
 
   #status {
     font-family: 'JetBrains Mono', ui-monospace, monospace;
@@ -328,8 +334,8 @@
   <div class="card">
     <h2>Indexed documents</h2>
     <table id="docs">
-      <thead><tr><th>Source</th><th>Chunks</th></tr></thead>
-      <tbody><tr><td colspan="2" class="empty-cell">Unlock with your admin key to view.</td></tr></tbody>
+      <thead><tr><th>Source</th><th>Chunks</th><th></th></tr></thead>
+      <tbody><tr><td colspan="3" class="empty-cell">Unlock with your admin key to view.</td></tr></tbody>
     </table>
   </div>
 
@@ -490,14 +496,42 @@ async function refreshDocs() {
     tbody.innerHTML = "";
     const entries = Object.entries(data.sources);
     if (!entries.length) {
-      tbody.innerHTML = '<tr><td colspan="2" class="empty-cell">Knowledge base is empty. Upload a document below.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="3" class="empty-cell">Knowledge base is empty. Upload a document below.</td></tr>';
     }
     for (const [src, n] of entries) {
       const tr = document.createElement("tr");
-      tr.innerHTML = '<td class="mono">' + escapeHtml(src) + '</td><td>' + n + '</td>';
+
+      const tdSrc = document.createElement("td");
+      tdSrc.className = "mono";
+      tdSrc.textContent = src;
+
+      const tdN = document.createElement("td");
+      tdN.textContent = n;
+
+      const tdAct = document.createElement("td");
+      tdAct.className = "actions";
+      const del = document.createElement("button");
+      del.className = "danger row-action";
+      del.textContent = "Delete";
+      del.addEventListener("click", () => deleteSource(src, n));
+      tdAct.appendChild(del);
+
+      tr.append(tdSrc, tdN, tdAct);
       tbody.appendChild(tr);
     }
     setStatus("Loaded. " + data.total_chunks + " chunks indexed across " + entries.length + " sources.", "ok");
+  } catch (e) { setStatus("Error: " + e.message, "err"); }
+}
+
+async function deleteSource(src, chunks) {
+  if (!confirm('Remove "' + src + '" (' + chunks + ' chunks) from the index?\n\nThe rest of the knowledge base is left untouched.')) return;
+  const fd = new FormData();
+  fd.append("source", src);
+  setStatus("Deleting " + src + "\u2026");
+  try {
+    const data = await api("/api/admin/delete", { method: "POST", body: fd });
+    setStatus("Removed " + data.deleted_chunks + " chunks from " + data.source + ". " + data.total_chunks + " remaining.", "ok");
+    refreshDocs();
   } catch (e) { setStatus("Error: " + e.message, "err"); }
 }
 

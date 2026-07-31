@@ -1,0 +1,5 @@
+# Normalise line endings so editing on Windows and building in Linux containers
+# don't produce whole-file diffs.
+* text=auto eol=lf
+*.png binary
+*.faiss binary

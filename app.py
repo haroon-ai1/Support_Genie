@@ -1,9 +1,16 @@
-"""Hugging Face Spaces entrypoint.
+"""Local / Hugging Face Spaces entrypoint.
 
-Gradio-SDK Spaces run `app.py` on port 7860. Our app is FastAPI, so this
-shim just boots the existing FastAPI app via uvicorn.
+The app is FastAPI; this shim just boots it with uvicorn. Honours $PORT so the
+same file works on Render (injects PORT), HF Spaces (expects 7860), and locally.
 """
+import os
+
 import uvicorn
 
 if __name__ == "__main__":
-    uvicorn.run("app.main:app", host="0.0.0.0", port=7860)
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=int(os.getenv("PORT", "7860")),
+        workers=1,
+    )

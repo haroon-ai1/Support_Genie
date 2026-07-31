@@ -1,6 +1,4 @@
---extra-index-url https://download.pytorch.org/whl/cpu
-torch
-sentence-transformers
+fastembed==0.8.0
 faiss-cpu
 pypdf
 langchain-text-splitters

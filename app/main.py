@@ -9,15 +9,25 @@ Endpoints:
   GET  /api/admin/docs      -> indexed sources             (X-Admin-Key)
   POST /api/admin/upload    -> ingest uploaded file        (X-Admin-Key)
   POST /api/admin/text      -> ingest pasted text          (X-Admin-Key)
+  POST /api/admin/delete    -> drop one source from index  (X-Admin-Key)
   POST /api/admin/reset     -> clear index + re-seed       (X-Admin-Key)
 
 On startup, if the index is empty, seeds the knowledge base from data/seed/
-so the deployed demo always has content (HF Spaces storage is ephemeral).
+so the deployed demo always has content (container storage is ephemeral on
+both Render's free tier and HF Spaces).
+
+Concurrency note: the module-level `kb` is briefly None during a reset, and
+FastAPI runs these sync handlers in a threadpool, so every handler that
+touches the knowledge base goes through `_require_kb()` and returns 503
+rather than raising AttributeError.
 """
+import gc
 import json
 import logging
 import os
 import re
+import secrets
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -47,6 +57,31 @@ DEFAULT_BRANDING = {
     "logo_url": "",
 }
 
+kb: KnowledgeBase | None = None
+# Serialises index-mutating operations (reset / ingest / delete). Non-blocking
+# acquire: a second concurrent write returns 409 instead of queueing behind a
+# rebuild that may take tens of seconds.
+_kb_lock = threading.Lock()
+
+
+def _require_kb() -> KnowledgeBase:
+    """Return the live KB, or 503 if a reset is mid-flight."""
+    current = kb
+    if current is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Knowledge base is rebuilding — try again in a few seconds.",
+        )
+    return current
+
+
+def _acquire_or_409() -> None:
+    if not _kb_lock.acquire(blocking=False):
+        raise HTTPException(
+            status_code=409,
+            detail="Another knowledge base operation is already running.",
+        )
+
 
 def _load_branding() -> dict:
     if BRANDING_PATH.exists():
@@ -62,14 +97,14 @@ def _save_branding(data: dict) -> None:
     config.STORAGE_DIR.mkdir(parents=True, exist_ok=True)
     BRANDING_PATH.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
-kb: KnowledgeBase | None = None
 
-
-def _seed_if_empty():
-    if kb.index.ntotal == 0 and SEED_DIR.exists():
+def _seed_if_empty(target: KnowledgeBase) -> None:
+    """Seed from data/seed/. Takes the KB explicitly so it can never read a
+    half-swapped global during a reset."""
+    if target.index.ntotal == 0 and SEED_DIR.exists():
         for f in sorted(SEED_DIR.glob("*")):
             if f.suffix.lower() in {".txt", ".md", ".pdf"}:
-                kb.add_document(f)
+                target.add_document(f)
 
 
 def _sanitize_upload_name(raw: str | None) -> str:
@@ -91,7 +126,7 @@ async def lifespan(app: FastAPI):
             "Set a strong ADMIN_KEY in the environment before exposing this service."
         )
     kb = KnowledgeBase()
-    _seed_if_empty()
+    _seed_if_empty(kb)
     yield
 
 
@@ -102,7 +137,9 @@ app = FastAPI(title="SupportGenie", lifespan=lifespan)
 
 
 def _check_admin(key: str | None):
-    if key != ADMIN_KEY:
+    # compare_digest keeps the comparison constant-time so a wrong key can't be
+    # recovered byte-by-byte from response timing.
+    if not key or not secrets.compare_digest(key, ADMIN_KEY):
         raise HTTPException(status_code=401, detail="Invalid admin key")
 
 
@@ -131,11 +168,18 @@ def admin_page():
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "chunks_indexed": kb.index.ntotal}
+    """Must never raise: a 5xx here can make the platform's health check
+    restart the container mid-reset, turning a slow rebuild into a crash loop."""
+    current = kb
+    return {
+        "status": "ok" if current is not None else "rebuilding",
+        "chunks_indexed": current.index.ntotal if current is not None else 0,
+    }
 
 
 @app.post("/api/ask")
 def ask(req: AskRequest):
+    current = _require_kb()
     branding = _load_branding()
     brand_name = branding.get("brand_name") or "SupportGenie"
     question = req.question.strip()
@@ -144,12 +188,15 @@ def ask(req: AskRequest):
     if len(question) > 1000:
         raise HTTPException(status_code=400, detail="Question too long")
     try:
-        return answer(kb, question, brand_name=brand_name)
+        return answer(current, question, brand_name=brand_name)
     except HTTPException:
         raise
     except Exception:
         logger.exception("answer() failed for question of length %d", len(question))
-        raise HTTPException(status_code=500, detail="The assistant is temporarily unavailable. Please try again in a moment.")
+        raise HTTPException(
+            status_code=500,
+            detail="The assistant is temporarily unavailable. Please try again in a moment.",
+        )
 
 
 @app.get("/api/branding")
@@ -184,7 +231,8 @@ def update_branding(
 @app.get("/api/admin/docs")
 def list_docs(x_admin_key: str | None = Header(default=None)):
     _check_admin(x_admin_key)
-    return {"sources": kb.sources(), "total_chunks": kb.index.ntotal}
+    current = _require_kb()
+    return {"sources": current.sources(), "total_chunks": current.index.ntotal}
 
 
 @app.post("/api/admin/upload")
@@ -193,6 +241,7 @@ def upload_doc(
     x_admin_key: str | None = Header(default=None),
 ):
     _check_admin(x_admin_key)
+    current = _require_kb()
     safe_name = _sanitize_upload_name(file.filename)
     suffix = Path(safe_name).suffix.lower()
     if suffix not in {".pdf", ".txt", ".md"}:
@@ -219,10 +268,16 @@ def upload_doc(
         logger.warning("Upload write failed for %s: %s", safe_name, exc)
         dest.unlink(missing_ok=True)
         raise HTTPException(status_code=500, detail="Could not save uploaded file")
-    n = kb.add_document(dest)
+
+    _acquire_or_409()
+    try:
+        n = current.add_document(dest)
+    finally:
+        _kb_lock.release()
+
     if n == 0:
         raise HTTPException(status_code=400, detail="No text could be extracted from the file")
-    return {"ingested_chunks": n, "source": dest.name, "total_chunks": kb.index.ntotal}
+    return {"ingested_chunks": n, "source": dest.name, "total_chunks": current.index.ntotal}
 
 
 @app.post("/api/admin/text")
@@ -232,10 +287,42 @@ def add_text(
     x_admin_key: str | None = Header(default=None),
 ):
     _check_admin(x_admin_key)
-    n = kb.add_text(text, source=source)
+    current = _require_kb()
+    _acquire_or_409()
+    try:
+        n = current.add_text(text, source=source)
+    finally:
+        _kb_lock.release()
     if n == 0:
         raise HTTPException(status_code=400, detail="Text is empty")
-    return {"ingested_chunks": n, "source": source, "total_chunks": kb.index.ntotal}
+    return {"ingested_chunks": n, "source": source, "total_chunks": current.index.ntotal}
+
+
+@app.post("/api/admin/delete")
+def delete_doc(
+    source: str = Form(...),
+    x_admin_key: str | None = Header(default=None),
+):
+    """Drop every chunk from one source without touching the rest of the index."""
+    _check_admin(x_admin_key)
+    current = _require_kb()
+    source = source.strip()
+    if not source:
+        raise HTTPException(status_code=400, detail="Source is required")
+
+    _acquire_or_409()
+    try:
+        removed = current.delete_source(source)
+    finally:
+        _kb_lock.release()
+
+    if removed == 0:
+        raise HTTPException(status_code=404, detail=f"No indexed source named '{source}'")
+    return {
+        "deleted_chunks": removed,
+        "source": source,
+        "total_chunks": current.index.ntotal,
+    }
 
 
 @app.post("/api/admin/reset")
@@ -243,8 +330,32 @@ def reset(x_admin_key: str | None = Header(default=None)):
     """Clear the index and re-seed from the demo knowledge base."""
     _check_admin(x_admin_key)
     global kb
-    for p in (config.INDEX_PATH, config.CHUNKS_PATH):
-        p.unlink(missing_ok=True)
-    kb = KnowledgeBase()
-    _seed_if_empty()
-    return {"status": "reset", "total_chunks": kb.index.ntotal}
+
+    _acquire_or_409()
+    try:
+        # Free the old FAISS index and its Python refs BEFORE building a new one,
+        # so we never briefly hold two indices in RAM on a 512 MB tier.
+        if kb is not None:
+            kb.index = None
+            kb.chunks = []
+        kb = None
+        gc.collect()
+
+        for p in (config.INDEX_PATH, config.CHUNKS_PATH):
+            p.unlink(missing_ok=True)
+
+        rebuilt = KnowledgeBase()
+        _seed_if_empty(rebuilt)
+        kb = rebuilt
+        return {"status": "reset", "total_chunks": kb.index.ntotal}
+    except Exception:
+        # Without this, one failed reset leaves kb=None forever and only a
+        # process restart recovers. Fall back to an empty-but-usable KB.
+        logger.exception("Reset failed; attempting to recover an empty knowledge base")
+        try:
+            kb = KnowledgeBase()
+        except Exception:
+            logger.exception("Could not recover a knowledge base; service needs a restart")
+        raise HTTPException(status_code=500, detail="Reset failed — check server logs")
+    finally:
+        _kb_lock.release()

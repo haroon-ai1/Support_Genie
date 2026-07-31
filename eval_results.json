@@ -1,0 +1,21 @@
+{
+  "k": 3,
+  "confidence_threshold": 0.25,
+  "chunks_indexed": 17,
+  "positives": {
+    "n": 25,
+    "hit_rate_at_k_chunk_level": 0.0,
+    "mrr": 0.0,
+    "grounded_rate": 0.84
+  },
+  "negatives": {
+    "n": 10,
+    "abstain_rate": 0.4,
+    "n_hard": 4,
+    "abstain_rate_hard": 0.0
+  },
+  "smalltalk": {
+    "n": 10,
+    "not_escalated_rate": 1.0
+  }
+}
