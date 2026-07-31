@@ -13,10 +13,15 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **Built by [Muhammad Haroon](https://linkedin.com/in/haroon-ai)** · BS AI, SZABIST Islamabad
+## 🚀 Live Demo
 
+🔗 https://support-genie.onrender.com
 </div>
 
 ---
+<p align="center">
+  <img src="assets/demo.gif" width="900"/>
+</p>
 
 An admin uploads a company's knowledge base — FAQs, policies, product docs — and customers get answers grounded strictly in those documents, with **source citations, retrieval confidence, and a hardened conversational layer** that refuses off-topic requests and jailbreak attempts.
 
